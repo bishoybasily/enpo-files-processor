@@ -21,12 +21,19 @@ import java.util.List;
 public class XlsxUtils {
 
     public static Flux<String[]> read(Flux<DataBuffer> content) {
+
         DataFormatter formatter = new DataFormatter();
-        return content.reduce(StreamUtils.empty(), StreamUtils.dataBufferInputStreamAccumulator())
-                .flatMapIterable(XlsxUtils::createWorkbook)
-                .flatMapIterable(rows -> rows)
-                .skip(0)
+
+        return content.reduce(StreamUtils.empty(), StreamUtils.dataBufferInputStreamAccumulator()) // reduce the file content input-stream into one single input-stream
+                .flatMapIterable(XlsxUtils::createWorkbook) // create empty workbook (iterable of sheets)
+                .flatMapIterable(rows -> rows) // map the rows as it is (iterable of rows)
+                .skip(0) // we can skip rows here if there is any header rows
                 .map(row -> {
+
+                    /*
+                     * read cells' contents
+                     */
+
                     int length = row.getPhysicalNumberOfCells();
                     String[] tokens = new String[length];
                     for (int i = 0; i < length; i++)
@@ -41,6 +48,11 @@ public class XlsxUtils {
             Workbook workbook = new XSSFWorkbook();
 
             Sheet sheet = workbook.createSheet();
+
+            /*
+             * write cells' contents
+             */
+
             for (int i = 0; i < strings.size(); i++) {
                 Row row = sheet.createRow(i);
                 for (int j = 0; j < strings.get(i).length; j++) {
