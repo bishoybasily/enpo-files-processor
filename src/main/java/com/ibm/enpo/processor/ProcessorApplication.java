@@ -6,18 +6,16 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.multipart.FilePart;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyExtractors;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.io.FileOutputStream;
 import java.util.Arrays;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import static org.springframework.web.reactive.function.server.RequestPredicates.POST;
 import static org.springframework.web.reactive.function.server.RequestPredicates.accept;
@@ -31,12 +29,7 @@ public class ProcessorApplication {
     }
 
     @Bean
-    public ExecutorService executorService() {
-        return Executors.newFixedThreadPool(10);
-    }
-
-    @Bean
-    public RouterFunction<ServerResponse> processor(ExecutorService executorService) {
+    public RouterFunction<ServerResponse> processor() {
 
         return RouterFunctions.route(
                 POST("/processor").and(accept(MediaType.MULTIPART_FORM_DATA)),
@@ -44,40 +37,51 @@ public class ProcessorApplication {
 
                     Mono<FilePart> filePartMono = serverRequest
                             .body(BodyExtractors.toMultipartData())
-                            .map(MultiValueMap::toSingleValueMap)
-                            .map(it -> it.get("file"))
-                            .map(FilePart.class::cast)
-                            .cache();
+                            .map(map -> (FilePart) map.toSingleValueMap().get("file")) // extract the uploaded multipart file from the form body
+                            .cache(); // cache it for multiple consumers
 
-                    Mono<String> nameMono = filePartMono.map(FilePart::filename);
+                    Mono<String> nameMono = filePartMono.map(FilePart::filename) // get file's name
+                            .cache(); // cache it for multiple consumers
 
-                    filePartMono.map(FilePart::content)
-                            .flatMapMany(XlsxUtils::read)
-                            .flatMap(strings -> {
-                                return Mono.fromCallable(() -> {
-                                    String[] result = Arrays.copyOf(strings, strings.length + 1);
-                                    result[strings.length] = UUID.randomUUID().toString();
-                                    return result;
-                                });
-                            })
-                            .collectList()
-                            .flatMap(XlsxUtils::write)
-                            .zipWith(nameMono, (bytes, name) -> {
-                                try {
-                                    IOUtils.write(bytes, new FileOutputStream(name));
-                                    return true;
-                                } catch (Exception e) {
-                                    return false;
-                                }
-                            })
+                    filePartMono.map(FilePart::content) // get file's content
+                            .flatMapMany(XlsxUtils::read) // read xlsx content (returns stream<string[]> where every single string[] represents a full row)
+                            .parallel().runOn(Schedulers.parallel()) // run the next tasks in parallel
+                            .flatMap(this::updateRow) // modify the string array (a dummy implementation that adds a new item to all the arrays)
+                            .sequential() // switch back from parallel to sequential to be able to collect them
+                            .collectList() // collect all the modified rows into list<string[]>
+                            .flatMap(XlsxUtils::write) // write the contents into byte[] (the byte[] is ready to be persisted as file)
+                            .zipWith(nameMono, this::writeTheFile) // do anything with the byte[], (a dummy implementation that writes the file to the disk)
                             .subscribe();
 
+                    /*
+                     * for the http part return a response determines that the file has been received and it is queued for processing
+                     */
                     return ServerResponse.ok()
                             .contentType(MediaType.APPLICATION_JSON)
                             .body(nameMono.map(Response::new), Response.class);
 
                 }
         );
+    }
+
+    private Boolean writeTheFile(byte[] bytes, String name) {
+        try {
+
+            String path = "/home/bishoybasily/Desktop/";
+
+            IOUtils.write(bytes, new FileOutputStream(path + name));
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private Mono<String[]> updateRow(String[] strings) {
+        return Mono.fromCallable(() -> {
+            String[] result = Arrays.copyOf(strings, strings.length + 1);
+            result[strings.length] = UUID.randomUUID().toString();
+            return result;
+        });
     }
 
 }
