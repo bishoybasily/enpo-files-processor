@@ -54,7 +54,7 @@ public class ProcessorApplication {
                             .subscribe();
 
                     /*
-                     * for the http part return a response determines that the file has been received and it is queued for processing
+                     * for the http part return a response shows that the file has been received and it is being processed.
                      */
                     return ServerResponse.ok()
                             .contentType(MediaType.APPLICATION_JSON)
