@@ -6,11 +6,11 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.springframework.core.io.buffer.DataBuffer;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
 
@@ -20,33 +20,35 @@ import java.util.List;
  */
 public class XlsxUtils {
 
-    public static Flux<String[]> read(Flux<DataBuffer> content) {
+    public static Flux<String[]> read(InputStream inputStream) {
+        return Flux.create(sink -> {
 
-        DataFormatter formatter = new DataFormatter();
+            try {
+                DataFormatter formatter = new DataFormatter();
+                XSSFWorkbook workbook = new XSSFWorkbook(inputStream);
 
-        return content.reduce(StreamUtils.empty(), StreamUtils.dataBufferInputStreamAccumulator()) // reduce the file content input-stream into one single input-stream
-                .flatMapIterable(XlsxUtils::createWorkbook) // create empty workbook (iterable of sheets)
-                .flatMapIterable(rows -> rows) // map the rows as it is (iterable of rows)
-                .skip(0) // we can skip rows here if there is any header rows
-                .map(row -> {
-
-                    /*
-                     * read cells' contents
-                     */
-
-                    int length = row.getPhysicalNumberOfCells();
-                    String[] tokens = new String[length];
-                    for (int i = 0; i < length; i++)
-                        tokens[i] = formatter.formatCellValue(row.getCell(i));
-                    return tokens;
+                workbook.forEach(sheet -> {
+                    sheet.forEach(row -> {
+                        int length = row.getPhysicalNumberOfCells();
+                        String[] tokens = new String[length];
+                        for (int i = 0; i < length; i++)
+                            tokens[i] = formatter.formatCellValue(row.getCell(i));
+                        sink.next(tokens);
+                    });
                 });
+
+                sink.complete();
+
+            } catch (IOException e) {
+                sink.error(e);
+            }
+
+        });
     }
 
     public static Mono<byte[]> write(List<String[]> strings) {
         return Mono.fromCallable(() -> {
-
             Workbook workbook = new XSSFWorkbook();
-
             Sheet sheet = workbook.createSheet();
 
             /*

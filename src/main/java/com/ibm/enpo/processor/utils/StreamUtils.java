@@ -1,27 +1,20 @@
 package com.ibm.enpo.processor.utils;
 
-import org.springframework.core.io.buffer.DataBuffer;
-
-import java.io.InputStream;
-import java.io.SequenceInputStream;
-import java.util.function.BiFunction;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 /**
  * @author bishoybasily
- * @since 2020-08-16
+ * @since 2020-08-24
  */
 public class StreamUtils {
 
-    public static InputStream empty() {
-        return new InputStream() {
-            public int read() {
-                return -1;
-            }
-        };
+    public static <T> Stream<T> sequential(Iterable<T> iterable) {
+        return StreamSupport.stream(iterable.spliterator(), false);
     }
 
-    public static BiFunction<InputStream, DataBuffer, InputStream> dataBufferInputStreamAccumulator() {
-        return (s, d) -> new SequenceInputStream(s, d.asInputStream());
+    public static <T> Stream<T> parallel(Iterable<T> iterable) {
+        return StreamSupport.stream(iterable.spliterator(), true);
     }
 
 }
