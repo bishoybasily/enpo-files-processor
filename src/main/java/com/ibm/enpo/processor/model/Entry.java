@@ -16,6 +16,10 @@ public class Entry {
 
     private String col1, col2, col3, col4;
 
+    public String[] toStringArray() {
+        return new String[]{col1, col2, col3, col4};
+    }
+
     public static Mono<Entry> from(String line) {
         return Mono.fromCallable(() -> {
             String a = line.substring(0, 20).trim();

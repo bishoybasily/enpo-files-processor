@@ -1,6 +1,5 @@
 package com.ibm.enpo.processor.utils;
 
-import lombok.SneakyThrows;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -67,11 +66,6 @@ public class XlsxUtils {
             return outputStream.toByteArray();
 
         });
-    }
-
-    @SneakyThrows
-    private static XSSFWorkbook createWorkbook(InputStream inputStream) {
-        return new XSSFWorkbook(inputStream);
     }
 
 }
