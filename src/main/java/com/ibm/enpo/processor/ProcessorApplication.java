@@ -1,7 +1,8 @@
 package com.ibm.enpo.processor;
 
+import com.ibm.enpo.processor.utils.RarUtils;
+import com.ibm.enpo.processor.utils.XlsxUtils;
 import org.apache.commons.io.IOUtils;
-import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.MediaType;
@@ -13,9 +14,11 @@ import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.Arrays;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import static org.springframework.web.reactive.function.server.RequestPredicates.POST;
 import static org.springframework.web.reactive.function.server.RequestPredicates.accept;
@@ -23,9 +26,22 @@ import static org.springframework.web.reactive.function.server.RequestPredicates
 @SpringBootApplication
 public class ProcessorApplication {
 
+    public static void main(String[] args) throws Exception {
 
-    public static void main(String[] args) {
-        SpringApplication.run(ProcessorApplication.class, args);
+        FileInputStream inputStream = new FileInputStream("C:\\Users\\BishoyArmiaZaherBasi\\Desktop\\ENPO\\input.rar");
+        String name = "Mailing file\\EVP-V233.OUT.OUT";
+        String password = "Enpo";
+
+        RarUtils.extract(name, inputStream, password)
+                .subscribe(new Consumer<byte[]>() {
+                    @Override
+                    public void accept(byte[] bytes) {
+                        writeTheFile(bytes, "temp");
+                    }
+                });
+
+
+//        SpringApplication.run(ProcessorApplication.class, args);
     }
 
     @Bean
@@ -50,7 +66,7 @@ public class ProcessorApplication {
                             .sequential() // switch back from parallel to sequential to be able to collect them
                             .collectList() // collect all the modified rows into list<string[]>
                             .flatMap(XlsxUtils::write) // write the contents into byte[] (the byte[] is ready to be persisted as file)
-                            .zipWith(nameMono, this::writeTheFile) // do anything with the byte[], (a dummy implementation that writes the file to the disk)
+//                            .zipWith(nameMono, this::writeTheFile) // do anything with the byte[], (a dummy implementation that writes the file to the disk)
                             .subscribe();
 
                     /*
@@ -64,12 +80,12 @@ public class ProcessorApplication {
         );
     }
 
-    private Boolean writeTheFile(byte[] bytes, String name) {
+    private static Boolean writeTheFile(byte[] bytes, String name) {
         try {
 
-            String path = "/home/bishoybasily/Desktop/";
+//            String path = "/home/bishoybasily/Desktop/";
 
-            IOUtils.write(bytes, new FileOutputStream(path + name));
+            IOUtils.write(bytes, new FileOutputStream( name));
             return true;
         } catch (Exception e) {
             return false;
