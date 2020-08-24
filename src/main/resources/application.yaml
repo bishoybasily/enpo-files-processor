@@ -1,2 +1,8 @@
 server:
   port: 8080
+
+processor:
+  thread-pool-size: ${PROCESSOR_THREAD_POOL_SIZE:10}
+  archive:
+    password: ${PROCESSOR_ARCHIVE_PASSWORD:Enpo}
+    target-file-name: ${PROCESSOR_ARCHIVE_TRAGET_FILE_NAME:Mailing file\EVP-V233.OUT.OUT}

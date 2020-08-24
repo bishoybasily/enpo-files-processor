@@ -25,7 +25,8 @@ public class RarUtils {
     private static byte[] extract(String name, Archive archive) throws RarException {
         FileHeader fileHeader;
         while ((fileHeader = archive.nextFileHeader()) != null) {
-            if (fileHeader.getFileName().equalsIgnoreCase(name)) {
+            String fileName = fileHeader.getFileName();
+            if (fileName.equalsIgnoreCase(name)) {
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
                 archive.extractFile(fileHeader, outputStream);
                 return outputStream.toByteArray();

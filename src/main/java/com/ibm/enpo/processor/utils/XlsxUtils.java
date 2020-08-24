@@ -22,7 +22,6 @@ public class XlsxUtils {
 
     public static Flux<String[]> read(InputStream inputStream) {
         return Flux.create(sink -> {
-
             try {
                 DataFormatter formatter = new DataFormatter();
                 XSSFWorkbook workbook = new XSSFWorkbook(inputStream);
@@ -42,7 +41,6 @@ public class XlsxUtils {
             } catch (IOException e) {
                 sink.error(e);
             }
-
         });
     }
 
