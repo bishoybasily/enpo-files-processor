@@ -25,6 +25,8 @@ public class FileUtils {
                 while ((line = bufferedReader.readLine()) != null)
                     sink.next(line);
 
+                sink.complete();
+
             } catch (IOException e) {
                 sink.error(e);
             } finally {
@@ -37,6 +39,14 @@ public class FileUtils {
             }
 
         });
+    }
+
+    public static String nameWithoutExtension(String name) {
+        return name.replaceFirst("[.][^.]+$", "");
+    }
+
+    public static String nameWithNewExtension(String name, String ext) {
+        return String.format("%s.%s", nameWithoutExtension(name), ext);
     }
 
 }

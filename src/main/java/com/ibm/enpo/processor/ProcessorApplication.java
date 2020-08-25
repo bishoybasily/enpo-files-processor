@@ -5,20 +5,23 @@ import com.ibm.enpo.processor.model.Entry;
 import com.ibm.enpo.processor.utils.FileUtils;
 import com.ibm.enpo.processor.utils.IOUtils;
 import com.ibm.enpo.processor.utils.RarUtils;
+import com.ibm.enpo.processor.utils.XlsxUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.web.reactive.function.BodyExtractors;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerResponse;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.util.List;
@@ -32,25 +35,91 @@ import static org.springframework.web.reactive.function.server.RequestPredicates
 @SpringBootApplication
 public class ProcessorApplication {
 
-    public static void main(String[] args) throws Exception {
-
-        InputStream inputStream = new FileInputStream("C:\\Users\\BishoyArmiaZaherBasi\\Desktop\\ENPO\\input.rar");
-        String targetFileName = "Mailing file\\EVP-V233.OUT.OUT";
-        String password = "Enpo";
-        List<String> block = RarUtils.extract(targetFileName, inputStream, password)
-                .flatMapMany(FileUtils::lines)
-//                .flatMap(Entry::from)
-//                .map(Entry::toStringArray)
-                .collectList()
-                .block();
-
-
-        System.out.println(block.size());
-
-//        SpringApplication.run(ProcessorApplication.class, args);
+    public static void main(String[] args) {
+        SpringApplication.run(ProcessorApplication.class, args);
     }
 
-    private static Boolean writeTheFile(byte[] bytes, String name) {
+    @Bean
+    public RouterFunction<ServerResponse> processor(ProcessorProperties props, ExecutorService executor) {
+
+        return RouterFunctions.route(
+                POST("/processor").and(accept(MediaType.MULTIPART_FORM_DATA)),
+                serverRequest -> {
+
+                    // get the uploaded file
+                    Mono<FilePart> filePartMono = serverRequest.body(BodyExtractors.toMultipartData())
+                            // extract the uploaded multipart file from the form body
+                            .map(map -> (FilePart) map.toSingleValueMap().get("file"))
+                            // cache it for multiple consumers
+                            .cache();
+
+                    // get file's name
+                    Mono<String> nameMono = filePartMono.map(FilePart::filename)
+                            // cache it for multiple consumers
+                            .cache();
+
+                    // get file's content
+                    Flux<Entry> entriesFlux = filePartMono.map(FilePart::content)
+                            // reduce the file content input-stream into one single input-stream
+                            .flatMap(this::reduce)
+                            // extract the compressed file into byte[]
+                            .flatMap(inputStream -> unrar(props, inputStream))
+                            // read the lines as a stream
+                            .flatMapMany(FileUtils::lines)
+                            // map every line to an entry object
+                            .flatMap(Entry::from)
+                            // cache it for multiple consumers
+                            .cache();
+
+                    // get the parsed entries count
+                    Mono<Integer> totalEntriesMono = entriesFlux.collectList()
+                            .map(List::size);
+
+                    // do the processing logic
+                    process(executor, nameMono, entriesFlux);
+
+                    /*
+                     * for the http part return a response shows that the file has been received and it is being processed.
+                     */
+                    return ServerResponse.ok()
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .body(nameMono.zipWith(totalEntriesMono, Response::new), Response.class);
+
+                }
+        );
+    }
+
+    private void process(ExecutorService executor, Mono<String> nameMono, Flux<Entry> entriesFlux) {
+        // run the next tasks in parallel (submit them to the configured executor service)
+        entriesFlux.parallel().runOn(Schedulers.fromExecutor(executor))
+
+                ////////////////////////////////
+                // processing logic goes here
+                ////////////////////////////////
+
+                // convert the entry to a string[] to be able to write it as xlsx
+                .map(Entry::toStringArray)
+                // switch back from parallel to sequential to be able to collect them
+                .sequential()
+                // collect all the modified rows into list<string[]>
+                .collectList()
+                .doOnNext(list -> log.info("Total processed entries {}", list.size()))
+                // write the final xlsx file as byte[]
+                .flatMap(XlsxUtils::write)
+                // do anything with the bytes, persist it on the desk or push it other service e.g. FTP
+                .zipWith(nameMono.map(name -> FileUtils.nameWithNewExtension(name, "xlsx")), this::persist)
+                .subscribe(System.out::println);
+    }
+
+    private Mono<InputStream> reduce(Flux<DataBuffer> content) {
+        return content.reduce(IOUtils.Input.empty(), IOUtils.Input.dataBufferInputStreamAccumulator());
+    }
+
+    private Mono<byte[]> unrar(ProcessorProperties props, java.io.InputStream inputStream) {
+        return RarUtils.extract(props.getArchive().getTargetFileName(), inputStream, props.getArchive().getPassword());
+    }
+
+    private Boolean persist(byte[] bytes, String name) {
         try {
 
             FileOutputStream outputStream = new FileOutputStream(name);
@@ -62,60 +131,6 @@ public class ProcessorApplication {
         } catch (Exception e) {
             return false;
         }
-    }
-
-    @Bean
-    public RouterFunction<ServerResponse> processor(ProcessorProperties props, ExecutorService executor) {
-
-        return RouterFunctions.route(
-                POST("/processor").and(accept(MediaType.MULTIPART_FORM_DATA)),
-                serverRequest -> {
-
-                    Mono<FilePart> filePartMono = serverRequest.body(BodyExtractors.toMultipartData())
-                            .map(map -> (FilePart) map.toSingleValueMap().get("file")) // extract the uploaded multipart file from the form body
-                            .cache(); // cache it for multiple consumers
-
-                    Mono<String> nameMono = filePartMono.map(FilePart::filename) // get file's name
-                            .cache(); // cache it for multiple consumers
-
-                    filePartMono.map(FilePart::content) // get file's content
-                            .flatMap(content -> content.reduce(IOUtils.Input.empty(), IOUtils.Input.dataBufferInputStreamAccumulator())) // reduce the file content input-stream into one single input-stream
-                            .flatMap(inputStream -> RarUtils.extract(props.getArchive().getTargetFileName(), inputStream, props.getArchive().getPassword())) // read xlsx content (returns stream<string[]> where every single string[] represents a full row)
-                            .flatMapMany(FileUtils::lines)
-                            .parallel().runOn(Schedulers.fromExecutor(executor)) // run the next tasks in parallel (submit them to the configured executor service)
-                            .flatMap(Entry::from)
-                            .map(Entry::toStringArray)
-                            .sequential()
-                            .collectList()
-                            .subscribe(it -> {
-
-                                System.out.println(it.size());
-
-                            });
-
-//                            .doOnNext(entry -> log.info("Started working on {}", entry))
-//                            // processing logic goes here
-//                            .map(Entry::toStringArray);
-//                            .doOnNext(strings -> log.info("Done working with {}", Arrays.toString(strings)))
-//                            .sequential() // switch back from parallel to sequential to be able to collect them
-//                            .collectList() // collect all the modified rows into list<string[]>
-//                            .subscribe(strings -> {
-//                                int size = strings.size();
-//                                System.out.println(size);
-//                            });
-//                            .doOnNext(list -> log.info("Total processed entries {}", list.size()))
-//                            .flatMap(XlsxUtils::write)
-//                            .subscribe(bytes -> writeTheFile(bytes, "output.xlsx"));
-
-                    /*
-                     * for the http part return a response shows that the file has been received and it is being processed.
-                     */
-                    return ServerResponse.ok()
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .body(nameMono.map(Response::new), Response.class);
-
-                }
-        );
     }
 
 }

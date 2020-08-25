@@ -23,7 +23,7 @@ public class IOUtils {
         }
 
         public static BiFunction<InputStream, DataBuffer, InputStream> dataBufferInputStreamAccumulator() {
-            return (s, d) -> new SequenceInputStream(s, d.asInputStream());
+            return (inputStream, dataBuffer) -> new SequenceInputStream(inputStream, dataBuffer.asInputStream());
         }
 
     }

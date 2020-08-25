@@ -15,6 +15,7 @@ import lombok.experimental.Accessors;
 @NoArgsConstructor
 public class Response {
 
-    private String file;
+    private String fileName;
+    private Integer totalEntries;
 
 }
