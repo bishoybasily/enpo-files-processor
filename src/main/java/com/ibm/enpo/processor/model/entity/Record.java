@@ -1,4 +1,4 @@
-package com.ibm.enpo.processor.model;
+package com.ibm.enpo.processor.model.entity;
 
 import lombok.Data;
 import lombok.experimental.Accessors;
@@ -12,25 +12,25 @@ import reactor.core.publisher.Mono;
 @Slf4j
 @Data
 @Accessors(chain = true)
-public class Entry {
+public class Record {
 
-    private String col1, col2, col3, col4;
+    private String id, name, reference, date, value;
 
-    public String[] toStringArray() {
-        return new String[]{col1, col2, col3, col4};
-    }
-
-    public static Mono<Entry> from(String line) {
+    public static Mono<Record> from(String line) {
         return Mono.fromCallable(() -> {
             String a = line.substring(0, 20).trim();
             String b = line.substring(20, 44).trim();
             String c = line.substring(44, 69).trim();
             String d = line.substring(69, 78).trim();
-            return new Entry().setCol1(a).setCol2(b).setCol3(c).setCol4(d);
+            return new Record().setId(a).setName(b).setReference(c).setDate(d);
         }).onErrorResume(it -> {
             log.warn("Error while trying to parse ({}) as entry, line is skipped", line);
             return Mono.empty();
         });
+    }
+
+    public String[] toStringArray() {
+        return new String[]{id, name, reference, date, value};
     }
 
 }

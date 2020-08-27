@@ -16,6 +16,7 @@ public class ProcessorProperties {
 
     private Archive archive;
     private Integer threadPoolSize;
+    private String redirectUri;
 
     @Setter
     @Getter

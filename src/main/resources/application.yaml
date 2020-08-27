@@ -3,6 +3,7 @@ server:
 
 processor:
   thread-pool-size: ${PROCESSOR_THREAD_POOL_SIZE:10}
+  redirect-uri: ${PROCESSOR_REDIRECT_URI:http://www.google.com}
   archive:
     password: ${PROCESSOR_ARCHIVE_PASSWORD:Enpo}
     target-file-name: ${PROCESSOR_ARCHIVE_TRAGET_FILE_NAME:Mailing file\EVP-V233.OUT.OUT}
